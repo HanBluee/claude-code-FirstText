@@ -1,0 +1,398 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番茄钟</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --color-work: #e74c3c;
+    --color-work-light: #fdf0ef;
+    --color-work-track: #f2e0de;
+    --color-break: #27ae60;
+    --color-break-light: #edfaf3;
+    --color-break-track: #d8f0e2;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #fefaf8;
+    transition: background-color 0.6s;
+  }
+
+  body.alarming {
+    animation: bgPulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes bgPulse {
+    0%, 100% { background-color: #fefaf8; }
+    50% { background-color: #fef0ed; }
+  }
+
+  body.break-mode {
+    background: #f8fdf9;
+  }
+
+  body.break-mode.alarming {
+    animation: bgPulseBreak 1.2s ease-in-out infinite;
+  }
+
+  @keyframes bgPulseBreak {
+    0%, 100% { background-color: #f8fdf9; }
+    50% { background-color: #edfaf3; }
+  }
+
+  .container {
+    text-align: center;
+    padding: 48px 44px;
+    border-radius: 28px;
+    background: #ffffff;
+    box-shadow: 0 20px 60px rgba(231, 76, 60, 0.10), 0 4px 16px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.5s;
+  }
+
+  .mode-label {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 20px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+    transition: all 0.4s;
+  }
+
+  .mode-label.work {
+    background: var(--color-work-light);
+    color: var(--color-work);
+  }
+
+  .mode-label.break {
+    background: var(--color-break-light);
+    color: var(--color-break);
+  }
+
+  .timer-ring {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 0 auto 12px;
+  }
+
+  .timer-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--color-work-track);
+    stroke-width: 8;
+    transition: stroke 0.5s;
+  }
+
+  .ring-track.break {
+    stroke: var(--color-break-track);
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: var(--color-work);
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear, stroke 0.5s;
+  }
+
+  .ring-progress.break {
+    stroke: var(--color-break);
+  }
+
+  .timer-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    color: #2d3436;
+    transition: color 0.4s;
+  }
+
+  .timer-text.warning { color: #e67e22; }
+  .timer-text.alarm   { color: #c0392b; }
+
+  .message {
+    font-size: 16px;
+    color: #b2bec3;
+    margin-bottom: 32px;
+    min-height: 24px;
+    transition: color 0.3s;
+  }
+
+  .message.done {
+    color: #2d3436;
+    font-weight: 600;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  button {
+    font-size: 15px;
+    font-weight: 600;
+    padding: 12px 28px;
+    border: 2px solid transparent;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.25s;
+    letter-spacing: 0.5px;
+    outline: none;
+  }
+
+  button:active { transform: scale(0.95); }
+
+  .btn-start {
+    background: var(--color-work);
+    color: #fff;
+    border-color: var(--color-work);
+  }
+  .btn-start:hover { background: #c0392b; border-color: #c0392b; }
+  .btn-start:disabled { background: #e0e0e0; border-color: #e0e0e0; color: #999; }
+
+  .btn-pause {
+    background: #fff;
+    color: #e67e22;
+    border-color: #e67e22;
+  }
+  .btn-pause:hover { background: #fef5e7; }
+  .btn-pause:disabled { border-color: #e0e0e0; color: #bbb; }
+
+  .btn-reset {
+    background: #fff;
+    color: #888;
+    border-color: #ddd;
+  }
+  .btn-reset:hover { background: #f5f5f5; }
+
+  .btn-skip {
+    background: #fff;
+    color: var(--color-break);
+    border-color: var(--color-break);
+    display: none;
+  }
+  .btn-skip:hover { background: var(--color-break-light); }
+  .btn-skip.visible { display: inline-block; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="mode-label work" id="modeLabel">专注中</div>
+
+  <div class="timer-ring">
+    <svg viewBox="0 0 300 300">
+      <circle class="ring-track" id="ringTrack" cx="150" cy="150" r="130" />
+      <circle class="ring-progress" id="ringProgress" cx="150" cy="150" r="130"
+        stroke-dasharray="816.814" stroke-dashoffset="0" />
+    </svg>
+    <div class="timer-text" id="timerText">25:00</div>
+  </div>
+
+  <div class="message" id="message">专注工作，保持高效</div>
+
+  <div class="buttons">
+    <button class="btn-start" id="btnStart" onclick="start()">开始</button>
+    <button class="btn-pause" id="btnPause" onclick="pause()" disabled>暂停</button>
+    <button class="btn-reset" id="btnReset" onclick="reset()">重置</button>
+    <button class="btn-skip" id="btnSkip" onclick="skipBreak()">跳过休息</button>
+  </div>
+</div>
+
+<script>
+const WORK_MINUTES = 25;
+const BREAK_MINUTES = 5;
+const CIRCUMFERENCE = 2 * Math.PI * 130; // ≈ 816.814
+
+let mode = 'work';        // 'work' | 'break'
+let remaining = WORK_MINUTES * 60;
+let totalSeconds = WORK_MINUTES * 60;
+let timerId = null;
+let alarming = false;
+let alarmTimeoutId = null;
+
+const $ = (id) => document.getElementById(id);
+
+const el = {
+  body: document.body,
+  modeLabel: $('modeLabel'),
+  ringTrack: $('ringTrack'),
+  ringProgress: $('ringProgress'),
+  timerText: $('timerText'),
+  message: $('message'),
+  btnStart: $('btnStart'),
+  btnPause: $('btnPause'),
+  btnSkip: $('btnSkip'),
+};
+
+function format(seconds) {
+  const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const s = String(seconds % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function setModeClasses() {
+  const isBreak = mode === 'break';
+  el.body.classList.toggle('break-mode', isBreak);
+  el.modeLabel.textContent = isBreak ? '休息中' : '专注中';
+  el.modeLabel.classList.toggle('work', !isBreak);
+  el.modeLabel.classList.toggle('break', isBreak);
+  el.ringTrack.classList.toggle('break', isBreak);
+  el.ringProgress.classList.toggle('break', isBreak);
+  el.btnSkip.classList.toggle('visible', isBreak || alarming);
+}
+
+function updateRing() {
+  const fraction = totalSeconds > 0 ? remaining / totalSeconds : 0;
+  el.ringProgress.style.strokeDashoffset = CIRCUMFERENCE * (1 - fraction);
+}
+
+function updateTimerText() {
+  el.timerText.textContent = format(remaining);
+  el.timerText.classList.remove('warning', 'alarm');
+  if (remaining <= 0) {
+    el.timerText.classList.add('alarm');
+  } else if (remaining <= 60) {
+    el.timerText.classList.add('warning');
+  }
+}
+
+function updateMessage(text, done) {
+  el.message.textContent = text;
+  el.message.classList.toggle('done', done);
+}
+
+function updateAll() {
+  updateRing();
+  updateTimerText();
+  setModeClasses();
+}
+
+function setAlarming(on) {
+  alarming = on;
+  el.body.classList.toggle('alarming', on);
+  el.btnSkip.classList.toggle('visible', mode === 'break' || on);
+  if (!on && alarmTimeoutId) {
+    clearTimeout(alarmTimeoutId);
+    alarmTimeoutId = null;
+  }
+}
+
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+}
+
+function start() {
+  if (timerId) return;
+  if (remaining <= 0 && !alarming) return;
+  setAlarming(false);
+  stopTimer();
+  timerId = setInterval(tick, 1000);
+  el.btnStart.disabled = true;
+  el.btnPause.disabled = false;
+}
+
+function pause() {
+  stopTimer();
+  el.btnStart.disabled = false;
+  el.btnPause.disabled = true;
+}
+
+function reset() {
+  stopTimer();
+  setAlarming(false);
+  mode = 'work';
+  remaining = WORK_MINUTES * 60;
+  totalSeconds = WORK_MINUTES * 60;
+  el.btnStart.disabled = false;
+  el.btnPause.disabled = true;
+  el.message.textContent = '专注工作，保持高效';
+  el.message.classList.remove('done');
+  updateAll();
+}
+
+function switchToBreak() {
+  setAlarming(false);
+  mode = 'break';
+  remaining = BREAK_MINUTES * 60;
+  totalSeconds = BREAK_MINUTES * 60;
+  updateAll();
+  updateMessage('休息一下，放松眼睛', false);
+  // Auto-start break
+  start();
+}
+
+function switchToWork() {
+  setAlarming(false);
+  stopTimer();
+  mode = 'work';
+  remaining = WORK_MINUTES * 60;
+  totalSeconds = WORK_MINUTES * 60;
+  el.btnStart.disabled = false;
+  el.btnPause.disabled = true;
+  updateAll();
+  updateMessage('专注工作，保持高效', false);
+}
+
+function skipBreak() {
+  // Only effective during break or alarm transition
+  if (mode !== 'break' && !alarming) return;
+  switchToWork();
+}
+
+function tick() {
+  if (remaining > 0) {
+    remaining--;
+    updateRing();
+    updateTimerText();
+  }
+
+  if (remaining <= 0) {
+    stopTimer();
+    el.btnStart.disabled = true;
+    el.btnPause.disabled = true;
+
+    if (mode === 'work') {
+      setAlarming(true);
+      updateMessage('时间到！', true);
+      updateTimerText();
+      alarmTimeoutId = setTimeout(switchToBreak, 2500);
+    } else {
+      // Break finished
+      updateMessage('休息结束！继续加油', true);
+      updateTimerText();
+      alarmTimeoutId = setTimeout(switchToWork, 2500);
+    }
+  }
+}
+
+// Init
+updateAll();
+</script>
+</body>
+</html>
